@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vocht advies</title>
+
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0b1220" />
+
+  <!-- iOS "Add to Home Screen" -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Vocht advies">
+
+  <style>
+    :root {
+      --bg: #0b1220;
+      --card: #121a2b;
+      --text: #e8eefc;
+      --muted: #a8b3d6;
+      --border: rgba(255,255,255,0.12);
+      --good: #22c55e;
+      --air: #3b82f6;
+      --heat: #f59e0b;
+      --bad: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial;
+      background: radial-gradient(1200px 800px at 20% 0%, #12214a 0%, var(--bg) 60%);
+      color: var(--text);
+      padding: 18px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    h1 { font-size: 22px; margin: 0; letter-spacing: 0.2px; }
+    .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    .grid { display: grid; gap: 12px; }
+    .card {
+      background: rgba(18,26,43,0.85);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 10px 35px rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+    }
+    .row { display:flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .label { color: var(--muted); font-size: 13px; }
+    .value { font-variant-numeric: tabular-nums; font-weight: 650; }
+    input[type="range"] { width: 100%; margin-top: 10px; }
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 650;
+      cursor: pointer;
+    }
+    .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.05);
+      width: 100%;
+    }
+    .dot { width: 12px; height: 12px; border-radius: 999px; }
+    .detail { color: var(--muted); margin: 10px 0 0; line-height: 1.35; }
+    .small { color: var(--muted); font-size: 12px; margin-top: 10px; }
+    .err { color: var(--bad); font-weight: 650; margin-top: 8px; }
+    .loading { color: var(--muted); }
+    .mono { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Vocht advies</h1>
+      <div class="sub">Vaste buitenlocatie: Bernard Pothaststraat 47, Kerkrade</div>
+    </div>
+    <button id="refreshBtn" class="btn">Ververs buitenweer</button>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <div class="row">
+        <div>
+          <div class="label">Slaapkamer temperatuur</div>
+          <div class="value mono"><span id="inTempVal">16.0</span> °C</div>
+        </div>
+      </div>
+      <input id="inTemp" type="range" min="10" max="24" step="0.5" value="16" />
+
+      <div style="height:12px"></div>
+
+      <div class="row">
+        <div>
+          <div class="label">Slaapkamer luchtvochtigheid</div>
+          <div class="value mono"><span id="inRhVal">70</span> %</div>
+        </div>
+      </div>
+      <input id="inRh" type="range" min="30" max="90" step="1" value="70" />
+    </section>
+
+    <section class="card">
+      <div class="row">
+        <div class="label">Buitenweer (Kerkrade)</div>
+        <div class="value mono" id="outStatus">Ophalen...</div>
+      </div>
+      <div style="height:10px"></div>
+      <div class="row">
+        <div class="label">Temp</div>
+        <div class="value mono" id="outTemp">—</div>
+      </div>
+      <div class="row">
+        <div class="label">RV</div>
+        <div class="value mono" id="outRh">—</div>
+      </div>
+      <div id="err" class="err" style="display:none;"></div>
+    </section>
+
+    <section class="card">
+      <div class="pill" id="advicePill">
+        <div class="dot" id="adviceDot" style="background: var(--air)"></div>
+        <div class="value" id="adviceTitle">Advies wordt berekend…</div>
+      </div>
+      <p class="detail" id="adviceDetail">Wacht even tot buitenweer is opgehaald.</p>
+      <div class="small">Richtwaarde: 18°C en 45–55% RV om schimmel rond kozijnen te stoppen.</div>
+    </section>
+  </div>
+</div>
+
+<script>
+  // Fixed Kerkrade coords (approx)
+  const FIXED_LAT = 50.8676;
+  const FIXED_LON = 6.0629;
+
+  const inTemp = document.getElementById('inTemp');
+  const inRh = document.getElementById('inRh');
+  const inTempVal = document.getElementById('inTempVal');
+  const inRhVal = document.getElementById('inRhVal');
+
+  const outStatus = document.getElementById('outStatus');
+  const outTempEl = document.getElementById('outTemp');
+  const outRhEl = document.getElementById('outRh');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const errEl = document.getElementById('err');
+
+  const adviceDot = document.getElementById('adviceDot');
+  const adviceTitle = document.getElementById('adviceTitle');
+  const adviceDetail = document.getElementById('adviceDetail');
+
+  let outdoor = null; // { tempC, rh }
+
+  function dewPointC(tempC, rhPercent) {
+    const rh = Math.max(1, Math.min(100, rhPercent));
+    const a = 17.62;
+    const b = 243.12;
+    const gamma = (a * tempC) / (b + tempC) + Math.log(rh / 100.0);
+    return (b * gamma) / (a - gamma);
+  }
+
+  function setAdvice(kind, title, detail) {
+    const colors = {
+      good: getCss('--good'),
+      air:  getCss('--air'),
+      heat: getCss('--heat'),
+    };
+    adviceDot.style.background = colors[kind] || colors.air;
+    adviceTitle.textContent = title;
+    adviceTitle.style.color = colors[kind] || '';
+    adviceDetail.textContent = detail;
+  }
+
+  function getCss(varName) {
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  }
+
+  function computeAdvice() {
+    if (!outdoor) {
+      setAdvice('air', 'Advies wordt berekend…', 'Wacht even tot buitenweer is opgehaald.');
+      return;
+    }
+
+    const indoorTemp = parseFloat(inTemp.value);
+    const indoorRH = parseFloat(inRh.value);
+    const outdoorTemp = outdoor.tempC;
+    const outdoorRH = outdoor.rh;
+
+    // "Goed" binnenklimaat: niets doen
+    const goodRH = indoorRH <= 55.0;
+    const goodTemp = indoorTemp >= 17.0;
+
+    if (goodRH && goodTemp) {
+      setAdvice(
+        'good',
+        '✅ Condities zijn goed',
+        `Binnenklimaat is goed (${indoorTemp.toFixed(1)}°C, ${Math.round(indoorRH)}% RV). Geen actie nodig.`
+      );
+      return;
+    }
+
+    const dpIn = dewPointC(indoorTemp, indoorRH);
+    const dpOut = dewPointC(outdoorTemp, outdoorRH);
+
+    // Outside dew point must be at least 1°C lower to be worth airing out
+    if (dpOut <= dpIn - 1.0) {
+      const tooCold = indoorTemp < 17.0;
+      const afterText = tooCold
+        ? " Daarna ramen dicht en verwarmen (bv. airco 18°C)."
+        : " Daarna ramen dicht (verwarmen is niet nodig als de temperatuur goed blijft).";
+
+      setAdvice(
+        'air',
+        '🪟 Luchten (10–15 min)',
+        `Binnenklimaat is niet ideaal (${indoorTemp.toFixed(1)}°C, ${Math.round(indoorRH)}% RV). ` +
+        `Advies: luchten 10–15 min.${afterText} ` +
+        `Reden: buitenlucht is droger (DP ${dpOut.toFixed(1)}°C < ${dpIn.toFixed(1)}°C).`
+      );
+      return;
+    }
+
+    setAdvice(
+      'heat',
+      '🔥 Verwarmen',
+      `Binnenklimaat is niet ideaal (${indoorTemp.toFixed(1)}°C, ${Math.round(indoorRH)}% RV). ` +
+      `Advies: niet luchten, maar verwarmen (bv. airco 18°C). ` +
+      `Reden: buitenlucht is niet droger genoeg (DP ${dpOut.toFixed(1)}°C ≥ ${dpIn.toFixed(1)}°C).`
+    );
+  }
+
+  async function fetchOutdoor() {
+    errEl.style.display = 'none';
+    refreshBtn.disabled = true;
+    outStatus.textContent = 'Ophalen...';
+
+    try {
+      const url =
+        `https://api.open-meteo.com/v1/forecast?latitude=${FIXED_LAT}&longitude=${FIXED_LON}` +
+        `&current=temperature_2m,relative_humidity_2m`;
+
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const tempC = data?.current?.temperature_2m;
+      const rh = data?.current?.relative_humidity_2m;
+
+      if (typeof tempC !== 'number' || typeof rh !== 'number') {
+        throw new Error('Onverwacht antwoord van weerbron.');
+      }
+
+      outdoor = { tempC, rh };
+
+      outTempEl.textContent = `${tempC.toFixed(1)} °C`;
+      outRhEl.textContent = `${Math.round(rh)} %`;
+      outStatus.textContent = 'Actueel';
+      computeAdvice();
+    } catch (e) {
+      outStatus.textContent = 'Niet beschikbaar';
+      errEl.textContent = `Buitenweer ophalen mislukt: ${e.message}`;
+      errEl.style.display = 'block';
+      setAdvice('heat', '⚠️ Geen buitenweer', 'Controleer internetverbinding en probeer opnieuw.');
+    } finally {
+      refreshBtn.disabled = false;
+    }
+  }
+
+  function syncUI() {
+    inTempVal.textContent = parseFloat(inTemp.value).toFixed(1);
+    inRhVal.textContent = Math.round(parseFloat(inRh.value)).toString();
+    computeAdvice();
+  }
+
+  inTemp.addEventListener('input', syncUI);
+  inRh.addEventListener('input', syncUI);
+  refreshBtn.addEventListener('click', fetchOutdoor);
+
+  // Auto run on load
+  syncUI();
+  fetchOutdoor();
+
+  // Register service worker (PWA offline caching)
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
